@@ -4,6 +4,8 @@ import io
 import re
 import pandas as pd
 from collections import Counter
+import matplotlib.pyplot as plt
+from PIL import Image
 
 # Настройка страницы
 st.set_page_config(
@@ -50,12 +52,15 @@ st.markdown("""
         color: #6B7280;
         margin-top: 0.5rem;
     }
+    .tab-content {
+        padding: 1rem 0;
+    }
     </style>
 """, unsafe_allow_html=True)
 
 # Функции для обработки данных
-def parse_input(text: str) -> dict[str, float]:
-    """Парсинг ввода с улучшенной обработкой многословных терминов"""
+def parse_frequency_input(text: str) -> dict[str, float]:
+    """Парсинг ввода с частотами"""
     frequencies = {}
     lines = text.strip().split('\n')
     
@@ -65,7 +70,6 @@ def parse_input(text: str) -> dict[str, float]:
             continue
         
         # Улучшенный парсинг с помощью regex
-        # Ищем последнее число (возможно с % или /) в строке
         match = re.search(r'(.+?)\s+([-+]?\d*\.?\d+\s*%?)$', line.strip())
         
         if not match:
@@ -105,10 +109,34 @@ def parse_input(text: str) -> dict[str, float]:
                 frequencies[word] = freq
                 
         except ValueError:
-            # Пропускаем строки с ошибками
             continue
     
     return frequencies
+
+def process_raw_text(text: str, stop_words: set = None) -> dict[str, int]:
+    """Обработка сплошного текста и подсчет частот слов"""
+    if stop_words is None:
+        stop_words = set()
+    
+    # Приводим к нижнему регистру
+    text = text.lower()
+    
+    # Удаляем специальные символы, оставляем только слова
+    words = re.findall(r'\b[a-zA-Zа-яА-ЯёЁ]{3,}\b', text)
+    
+    # Фильтруем стоп-слова
+    words = [word for word in words if word not in stop_words]
+    
+    # Подсчитываем частоты
+    word_counts = Counter(words)
+    
+    # Нормализуем частоты
+    if word_counts:
+        max_count = max(word_counts.values())
+        frequencies = {word: count / max_count for word, count in word_counts.items()}
+        return frequencies
+    
+    return {}
 
 def normalize_frequencies(frequencies: dict[str, float]) -> dict[str, float]:
     """Нормализация частот к диапазону 0-1"""
@@ -117,7 +145,6 @@ def normalize_frequencies(frequencies: dict[str, float]) -> dict[str, float]:
     
     max_freq = max(frequencies.values())
     
-    # Нормализуем только если есть большие числа
     if max_freq > 1.0:
         return {word: freq / max_freq for word, freq in frequencies.items()}
     
@@ -147,9 +174,16 @@ def apply_filters(frequencies: dict[str, float],
 @st.cache_data(show_spinner=False)
 def generate_wordcloud_image(frequencies: dict[str, float], 
                             settings: dict) -> io.BytesIO:
-    """Генерация изображения облака слов с кэшированием"""
+    """Генерация изображения облака слов с высоким качеством"""
     if not frequencies:
         return None
+    
+    # Создаем фигуру с высоким DPI
+    dpi = settings['dpi']
+    width_inches = settings['width'] / dpi
+    height_inches = settings['height'] / dpi
+    
+    fig, ax = plt.subplots(figsize=(width_inches, height_inches), dpi=dpi)
     
     # Создаем облако слов
     wordcloud = WordCloud(
@@ -163,18 +197,92 @@ def generate_wordcloud_image(frequencies: dict[str, float],
         random_state=42,
         collocations=False,
         prefer_horizontal=0.8,
-        margin=2
+        margin=2,
+        scale=settings.get('scale_factor', 1.0)  # Для дополнительного масштабирования
     )
     
     # Генерируем облако
     wordcloud.generate_from_frequencies(frequencies)
     
-    # Конвертируем в PIL Image и затем в BytesIO
-    img = wordcloud.to_image()
-    buf = io.BytesIO()
-    img.save(buf, format="PNG", optimize=True, quality=95)
-    buf.seek(0)
+    # Отображаем на фигуре
+    ax.imshow(wordcloud, interpolation='bilinear')
+    ax.axis('off')
     
+    # Сохраняем в буфер с высоким качеством
+    buf = io.BytesIO()
+    plt.savefig(buf, format='PNG', 
+                dpi=dpi, 
+                bbox_inches='tight', 
+                pad_inches=0,
+                facecolor=settings['background_color'],
+                optimize=True)
+    plt.close(fig)
+    
+    buf.seek(0)
+    return buf
+
+def generate_high_quality_image(frequencies: dict[str, float], 
+                               settings: dict, 
+                               format: str = 'PNG') -> io.BytesIO:
+    """Генерация изображения в сверхвысоком качестве"""
+    if not frequencies:
+        return None
+    
+    # Создаем фигуру с высоким DPI для лучшего качества
+    dpi = settings['dpi']
+    width_inches = settings['width'] / dpi
+    height_inches = settings['height'] / dpi
+    
+    fig, ax = plt.subplots(figsize=(width_inches, height_inches), dpi=dpi)
+    
+    # Создаем облако слов с улучшенными настройками
+    wordcloud = WordCloud(
+        width=settings['width'] * 2,  # Увеличиваем для лучшего качества
+        height=settings['height'] * 2,
+        background_color=settings['background_color'],
+        colormap=settings['colormap'],
+        max_words=settings['max_words'],
+        min_font_size=settings['min_font_size'],
+        max_font_size=settings['max_font_size'],
+        random_state=42,
+        collocations=False,
+        prefer_horizontal=0.8,
+        margin=2,
+        scale=2.0  # Увеличиваем scale для лучшей детализации
+    )
+    
+    # Генерируем облако
+    wordcloud.generate_from_frequencies(frequencies)
+    
+    # Отображаем на фигуре
+    ax.imshow(wordcloud, interpolation='bicubic')  # Более качественная интерполяция
+    ax.axis('off')
+    
+    # Сохраняем в выбранном формате
+    buf = io.BytesIO()
+    
+    if format.upper() == 'PNG':
+        plt.savefig(buf, format='PNG', 
+                    dpi=dpi, 
+                    bbox_inches='tight', 
+                    pad_inches=0,
+                    facecolor=settings['background_color'],
+                    optimize=True,
+                    metadata={'Software': 'WordCloud Generator'})
+    elif format.upper() == 'PDF':
+        plt.savefig(buf, format='PDF', 
+                    dpi=dpi, 
+                    bbox_inches='tight', 
+                    pad_inches=0,
+                    facecolor=settings['background_color'])
+    elif format.upper() == 'SVG':
+        plt.savefig(buf, format='SVG', 
+                    bbox_inches='tight', 
+                    pad_inches=0,
+                    facecolor=settings['background_color'])
+    
+    plt.close(fig)
+    buf.seek(0)
     return buf
 
 def display_statistics(frequencies: dict[str, float], 
@@ -190,6 +298,7 @@ def display_statistics(frequencies: dict[str, float],
             st.write(f"После фильтров: **{len(frequencies)}**")
             st.write(f"Мин. частота: **{settings['min_frequency']}**")
             st.write(f"Масштаб: **×{settings['scale']}**")
+            st.write(f"Качество DPI: **{settings['dpi']}**")
     
     with col2:
         with st.container(border=True):
@@ -208,7 +317,7 @@ def display_statistics(frequencies: dict[str, float],
     
     # Создаем DataFrame для красивого отображения
     df = pd.DataFrame(sorted_words, columns=['Слово', 'Частота'])
-    df.index = df.index + 1  # Начинаем с 1 вместо 0
+    df.index = df.index + 1
     
     # Отображаем в 2 колонки
     col1, col2 = st.columns(2)
@@ -250,7 +359,7 @@ with st.sidebar:
         index=2
     )
     
-    # Настройки размеров
+    # Настройки размеров шрифта
     col1, col2 = st.columns(2)
     with col1:
         min_font_size = st.slider("Мин. шрифт", 5, 50, 10)
@@ -263,18 +372,39 @@ with st.sidebar:
     min_frequency = st.number_input("Мин. частота", 0.0, 1000.0, 0.0, 0.1)
     
     # Размеры облака
-    width = st.slider("Ширина", 400, 1600, 1000, 50)
-    height = st.slider("Высота", 300, 1200, 600, 50)
+    width = st.slider("Ширина (px)", 400, 2000, 1200, 50)
+    height = st.slider("Высота (px)", 300, 1500, 800, 50)
+    
+    # Настройки качества
+    dpi = st.slider("Качество (DPI)", 72, 600, 300, 50)
     
     # Цвет фона
     background_color = st.color_picker("Цвет фона", "#FFFFFF")
-
-# Основная область
-with st.container():
-    st.markdown("### 📝 Ввод данных")
     
-    # Информационное окно
-    with st.expander("📋 Форматы ввода (нажмите для просмотра)"):
+    # Стоп-слова для обработки текста
+    with st.expander("📝 Стоп-слова (для обработки текста)"):
+        default_stopwords = """the and of to in a for that with as on at by from
+        is are was were be been have has had this that these those
+        they their them it its or but not what which who whom
+        will would can could shall should may might must"""
+        
+        stop_words_input = st.text_area(
+            "Введите стоп-слова (через пробел):",
+            value=default_stopwords,
+            height=100,
+            help="Эти слова будут исключены из анализа текста"
+        )
+        
+        # Преобразуем в множество для быстрого поиска
+        stop_words = set(stop_words_input.lower().split())
+
+# Основная область - вкладки для разных типов ввода
+tab1, tab2 = st.tabs(["📊 С частотами слов", "📝 Сплошной текст"])
+
+with tab1:
+    st.markdown("### 📊 Ввод данных с частотами")
+    
+    with st.expander("📋 Форматы ввода"):
         st.markdown("""
         **Поддерживаемые форматы:**
         - `Materials science 801` (целые числа)
@@ -293,8 +423,8 @@ with st.container():
         ```
         """)
     
-    # Поле ввода с примером
-    default_data = """Materials science\t801
+    # Поле ввода с частотами
+    default_freq_data = """Materials science\t801
 Chemistry\t698
 Engineering\t395
 Composite material\t473
@@ -304,19 +434,58 @@ Metallurgy\t391
 Nanotechnology\t285
 Biomaterials\t267"""
 
-    input_data = st.text_area(
+    freq_input_data = st.text_area(
         "Введите слова и частоты (каждое слово с новой строки):",
-        value=default_data,
+        value=default_freq_data,
         height=200,
+        key="freq_input",
         label_visibility="collapsed"
     )
     
-    # Предпросмотр количества слов в реальном времени
-    parsed_data = parse_input(input_data)
+    input_mode = "frequency"
+
+with tab2:
+    st.markdown("### 📝 Ввод сплошного текста")
+    
+    with st.expander("ℹ️ Как это работает"):
+        st.markdown("""
+        **Функция анализа текста:**
+        1. Текст разбивается на отдельные слова
+        2. Удаляются стоп-слова (указаны в настройках)
+        3. Считается частота каждого слова
+        4. На основе частот генерируется облако слов
+        
+        **Пример текста для анализа:**
+        """)
+        st.code("""Special service environments challenge the metallic interconnector 
+(MIC) of solid oxide fuel cells with high‐temperature oxidation, 
+corrosion, and mechanical stresses under extreme conditions.""")
+    
+    # Поле ввода сплошного текста
+    default_text_data = """Special service environments challenge the metallic interconnector (MIC) of solid oxide fuel cells with high‐temperature oxidation, corrosion, and mechanical stresses under extreme conditions. The degradation mechanisms affect performance and durability, requiring advanced materials and protective coatings for long-term operation in harsh environments."""
+
+    text_input_data = st.text_area(
+        "Введите или вставьте текст для анализа:",
+        value=default_text_data,
+        height=250,
+        key="text_input",
+        label_visibility="collapsed"
+    )
+    
+    input_mode = "text"
+
+# Предпросмотр
+if input_mode == "frequency":
+    parsed_data = parse_frequency_input(freq_input_data)
     if parsed_data:
-        st.caption(f"✅ Распознано слов: {len(parsed_data)}")
+        st.caption(f"✅ Распознано слов с частотами: {len(parsed_data)}")
     else:
         st.caption("ℹ️ Введите данные в указанном формате")
+else:
+    if text_input_data.strip():
+        # Показываем предварительную статистику
+        word_count = len(re.findall(r'\b\w+\b', text_input_data))
+        st.caption(f"📝 Введено слов: {word_count} (стоп-слова будут исключены)")
 
 # Кнопки управления
 col1, col2, col3 = st.columns([1, 2, 1])
@@ -325,72 +494,144 @@ with col2:
 
 # Обработка генерации
 if generate_btn:
-    if not input_data.strip():
-        st.error("❌ Введите данные для генерации облака слов!")
+    frequencies = {}
+    total_words = 0
+    
+    if input_mode == "frequency":
+        if not freq_input_data.strip():
+            st.error("❌ Введите данные для генерации облака слов!")
+            st.stop()
+        
+        with st.spinner("🔄 Обработка данных с частотами..."):
+            frequencies = parse_frequency_input(freq_input_data)
+            total_words = len(frequencies)
+    
+    elif input_mode == "text":
+        if not text_input_data.strip():
+            st.error("❌ Введите текст для анализа!")
+            st.stop()
+        
+        with st.spinner("🔄 Анализ текста и подсчет частот..."):
+            frequencies = process_raw_text(text_input_data, stop_words)
+            total_words = sum(Counter(re.findall(r'\b\w+\b', text_input_data.lower())).values())
+    
+    if not frequencies:
+        error_msg = "Не удалось распознать данные." if input_mode == "frequency" else "Не найдено значимых слов после фильтрации стоп-слов."
+        st.error(f"❌ {error_msg}")
         st.stop()
     
-    with st.spinner("🔄 Обработка данных..."):
-        # Парсим и обрабатываем данные
-        frequencies = parse_input(input_data)
+    # Применяем нормализацию и фильтры
+    frequencies = normalize_frequencies(frequencies)
+    frequencies = apply_filters(frequencies, min_frequency, scale, max_words)
+    
+    if not frequencies:
+        st.error(f"❌ Нет слов с частотой выше {min_frequency}!")
+        st.stop()
+    
+    # Настройки для генерации
+    settings = {
+        'width': width,
+        'height': height,
+        'background_color': background_color,
+        'colormap': color_schemes[selected_color],
+        'max_words': max_words,
+        'min_font_size': min_font_size,
+        'max_font_size': max_font_size,
+        'scale': scale,
+        'min_frequency': min_frequency,
+        'dpi': dpi,
+        'scale_factor': 1.5  # Коэффициент для улучшения качества
+    }
+    
+    # Генерация изображения
+    with st.spinner("🎨 Генерация облака слов в высоком качестве..."):
+        img_buffer = generate_wordcloud_image(frequencies, settings)
+        high_quality_buffer = generate_high_quality_image(frequencies, settings, 'PNG')
+    
+    # Отображаем результат
+    st.markdown("---")
+    st.markdown("### ☁️ Результат")
+    
+    if img_buffer:
+        # Отображаем изображение
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.image(img_buffer, use_container_width=True, caption="Предпросмотр")
         
-        if not frequencies:
-            st.error("❌ Не удалось распознать данные. Проверьте формат ввода.")
-            st.stop()
+        # Кнопки скачивания в разных форматах и качестве
+        st.markdown("### 💾 Скачать изображение")
         
-        total_words = len(frequencies)
-        frequencies = normalize_frequencies(frequencies)
-        frequencies = apply_filters(frequencies, min_frequency, scale, max_words)
+        col1, col2, col3, col4 = st.columns(4)
         
-        if not frequencies:
-            st.error(f"❌ Нет слов с частотой выше {min_frequency}!")
-            st.stop()
-        
-        # Настройки для генерации
-        settings = {
-            'width': width,
-            'height': height,
-            'background_color': background_color,
-            'colormap': color_schemes[selected_color],
-            'max_words': max_words,
-            'min_font_size': min_font_size,
-            'max_font_size': max_font_size,
-            'scale': scale,
-            'min_frequency': min_frequency
-        }
-        
-        # Генерируем изображение
-        with st.spinner("🎨 Генерация облака слов..."):
-            img_buffer = generate_wordcloud_image(frequencies, settings)
-        
-        # Отображаем результат
-        st.markdown("---")
-        st.markdown("### ☁️ Результат")
-        
-        if img_buffer:
-            # Отображаем изображение
-            col1, col2, col3 = st.columns([1, 2, 1])
-            with col2:
-                st.image(img_buffer, use_container_width=True)
-            
-            # Кнопка скачивания
+        with col1:
             st.download_button(
-                label="⬇️ Скачать изображение (PNG)",
-                data=img_buffer,
-                file_name="wordcloud.png",
+                label="⬇️ PNG (высокое качество)",
+                data=high_quality_buffer,
+                file_name="wordcloud_high_quality.png",
                 mime="image/png",
-                use_container_width=True
+                use_container_width=True,
+                help=f"Разрешение: {width}x{height}px, DPI: {dpi}"
             )
-            
-            # Статистика
-            st.markdown("---")
-            st.markdown("### 📊 Статистика")
-            display_statistics(frequencies, total_words, settings)
-            
-            # Сохраняем в сессию для возможного повторного использования
-            st.session_state['last_image'] = img_buffer.getvalue()
-            st.session_state['last_frequencies'] = frequencies
-            st.session_state['last_settings'] = settings
-            st.session_state['total_words'] = total_words
+        
+        with col2:
+            # PDF вариант
+            pdf_buffer = generate_high_quality_image(frequencies, settings, 'PDF')
+            st.download_button(
+                label="⬇️ PDF (векторное)",
+                data=pdf_buffer,
+                file_name="wordcloud.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+                help="Векторный формат для печати"
+            )
+        
+        with col3:
+            # SVG вариант
+            svg_buffer = generate_high_quality_image(frequencies, settings, 'SVG')
+            st.download_button(
+                label="⬇️ SVG (векторное)",
+                data=svg_buffer,
+                file_name="wordcloud.svg",
+                mime="image/svg+xml",
+                use_container_width=True,
+                help="Масштабируемый векторный формат"
+            )
+        
+        with col4:
+            # Настройка DPI
+            with st.popover("⚙️ Настроить качество"):
+                custom_dpi = st.slider("DPI для сохранения", 72, 1200, 600, 50)
+                custom_width = st.slider("Ширина (px)", 400, 4000, 2000, 100)
+                custom_height = st.slider("Высота (px)", 300, 3000, 1500, 100)
+                
+                if st.button("🎨 Создать кастомное изображение"):
+                    custom_settings = settings.copy()
+                    custom_settings['dpi'] = custom_dpi
+                    custom_settings['width'] = custom_width
+                    custom_settings['height'] = custom_height
+                    
+                    with st.spinner(f"Создание изображения {custom_width}x{custom_height}px @ {custom_dpi}DPI..."):
+                        custom_buffer = generate_high_quality_image(frequencies, custom_settings, 'PNG')
+                        
+                    st.download_button(
+                        label=f"⬇️ Скачать ({custom_width}x{custom_height}px, {custom_dpi}DPI)",
+                        data=custom_buffer,
+                        file_name=f"wordcloud_{custom_width}x{custom_height}_{custom_dpi}dpi.png",
+                        mime="image/png",
+                        use_container_width=True
+                    )
+        
+        # Статистика
+        st.markdown("---")
+        st.markdown("### 📊 Статистика")
+        display_statistics(frequencies, total_words, settings)
+        
+        # Сохраняем в сессию для возможного повторного использования
+        st.session_state['last_image'] = img_buffer.getvalue()
+        st.session_state['last_frequencies'] = frequencies
+        st.session_state['last_settings'] = settings
+        st.session_state['total_words'] = total_words
+        st.session_state['input_mode'] = input_mode
 
 # Показываем последний результат если есть
 elif 'last_image' in st.session_state:
@@ -400,14 +641,33 @@ elif 'last_image' in st.session_state:
     with col2:
         st.image(st.session_state['last_image'], use_container_width=True)
     
-    # Кнопка скачивания
-    st.download_button(
-        label="⬇️ Скачать изображение (PNG)",
-        data=st.session_state['last_image'],
-        file_name="wordcloud.png",
-        mime="image/png",
-        use_container_width=True
-    )
+    # Кнопки скачивания
+    st.markdown("### 💾 Скачать изображение")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.download_button(
+            label="⬇️ PNG (высокое качество)",
+            data=st.session_state['last_image'],
+            file_name="wordcloud.png",
+            mime="image/png",
+            use_container_width=True
+        )
+    
+    with col2:
+        # Регенерация высококачественного изображения
+        high_quality_buffer = generate_high_quality_image(
+            st.session_state['last_frequencies'],
+            st.session_state['last_settings'],
+            'PNG'
+        )
+        st.download_button(
+            label="⬇️ PNG (ультра качество)",
+            data=high_quality_buffer,
+            file_name="wordcloud_ultra_hq.png",
+            mime="image/png",
+            use_container_width=True
+        )
     
     # Статистика
     st.markdown("---")
@@ -424,8 +684,8 @@ st.markdown(
     """
     <div style="text-align: center; color: #6B7280; padding: 1rem;">
         @devloped by daM • WordCloud Generator • 
+        Поддерживает DPI до 600+ и анализ текста
     </div>
     """,
     unsafe_allow_html=True
-
 )
