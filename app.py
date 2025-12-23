@@ -423,8 +423,9 @@ st.markdown("---")
 st.markdown(
     """
     <div style="text-align: center; color: #6B7280; padding: 1rem;">
-        Создано с помощью Streamlit • WordCloud Generator • v2.0
+        @devloped by daM • WordCloud Generator • 
     </div>
     """,
     unsafe_allow_html=True
+
 )
