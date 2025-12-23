@@ -212,11 +212,13 @@ def generate_wordcloud_image(frequencies: dict[str, float],
     else:
         jpeg_background = settings['background_color']
     
+    # Для JPEG нужно установить цвет фона другим способом
+    fig.patch.set_facecolor(jpeg_background)
     jpeg_buf = io.BytesIO()
     fig.savefig(jpeg_buf, format='JPEG', dpi=dpi, 
                 bbox_inches='tight', pad_inches=0,
-                facecolor=jpeg_background,
                 quality=settings['jpeg_quality'])
+    fig.patch.set_facecolor('white')  # Возвращаем обратно
     jpeg_buf.seek(0)
     
     plt.close(fig)
@@ -651,3 +653,4 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
