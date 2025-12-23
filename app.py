@@ -170,7 +170,7 @@ def apply_filters(frequencies: dict[str, float],
         scaled = dict(sorted_items[:max_words])
     
     return scaled
-
+    
 @st.cache_data(show_spinner=False)
 def generate_wordcloud_image(frequencies: dict[str, float], 
                             settings: dict) -> io.BytesIO:
@@ -198,7 +198,7 @@ def generate_wordcloud_image(frequencies: dict[str, float],
         collocations=False,
         prefer_horizontal=0.8,
         margin=2,
-        scale=settings.get('scale_factor', 1.0)  # Для дополнительного масштабирования
+        scale=settings.get('scale_factor', 1.0)
     )
     
     # Генерируем облако
@@ -214,8 +214,7 @@ def generate_wordcloud_image(frequencies: dict[str, float],
                 dpi=dpi, 
                 bbox_inches='tight', 
                 pad_inches=0,
-                facecolor=settings['background_color'],
-                optimize=True)
+                facecolor=settings['background_color'])
     plt.close(fig)
     
     buf.seek(0)
@@ -237,7 +236,7 @@ def generate_high_quality_image(frequencies: dict[str, float],
     
     # Создаем облако слов с улучшенными настройками
     wordcloud = WordCloud(
-        width=settings['width'] * 2,  # Увеличиваем для лучшего качества
+        width=settings['width'] * 2,
         height=settings['height'] * 2,
         background_color=settings['background_color'],
         colormap=settings['colormap'],
@@ -248,14 +247,14 @@ def generate_high_quality_image(frequencies: dict[str, float],
         collocations=False,
         prefer_horizontal=0.8,
         margin=2,
-        scale=2.0  # Увеличиваем scale для лучшей детализации
+        scale=2.0
     )
     
     # Генерируем облако
     wordcloud.generate_from_frequencies(frequencies)
     
     # Отображаем на фигуре
-    ax.imshow(wordcloud, interpolation='bicubic')  # Более качественная интерполяция
+    ax.imshow(wordcloud, interpolation='bicubic')
     ax.axis('off')
     
     # Сохраняем в выбранном формате
@@ -266,9 +265,7 @@ def generate_high_quality_image(frequencies: dict[str, float],
                     dpi=dpi, 
                     bbox_inches='tight', 
                     pad_inches=0,
-                    facecolor=settings['background_color'],
-                    optimize=True,
-                    metadata={'Software': 'WordCloud Generator'})
+                    facecolor=settings['background_color'])
     elif format.upper() == 'PDF':
         plt.savefig(buf, format='PDF', 
                     dpi=dpi, 
@@ -280,8 +277,29 @@ def generate_high_quality_image(frequencies: dict[str, float],
                     bbox_inches='tight', 
                     pad_inches=0,
                     facecolor=settings['background_color'])
+    elif format.upper() == 'JPG' or format.upper() == 'JPEG':
+        plt.savefig(buf, format='JPEG', 
+                    dpi=dpi, 
+                    bbox_inches='tight', 
+                    pad_inches=0,
+                    facecolor=settings['background_color'],
+                    quality=95)  # quality только для JPEG
     
     plt.close(fig)
+    buf.seek(0)
+    
+    # Оптимизируем PNG с помощью PIL если нужно
+    if format.upper() == 'PNG':
+        try:
+            from PIL import Image
+            img = Image.open(buf)
+            optimized_buf = io.BytesIO()
+            img.save(optimized_buf, format='PNG', optimize=True)
+            optimized_buf.seek(0)
+            return optimized_buf
+        except ImportError:
+            pass
+    
     buf.seek(0)
     return buf
 
@@ -689,3 +707,4 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
