@@ -4,8 +4,6 @@ import io
 import re
 import pandas as pd
 from collections import Counter
-from PIL import Image
-import os
 
 # Настройка страницы
 st.set_page_config(
@@ -54,57 +52,6 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
-
-# Функция для получения доступных шрифтов
-def get_available_fonts():
-    """Получение списка доступных шрифтов в системе"""
-    font_options = {
-        'Стандартный (Arial)': None,  # Будет использоваться шрифт по умолчанию
-        'Times New Roman': 'times.ttf',
-        'Georgia': 'georgia.ttf',
-        'Verdana': 'verdana.ttf',
-        'Tahoma': 'tahoma.ttf',
-        'Courier New': 'cour.ttf',
-        'Comic Sans MS': 'comic.ttf',
-        'Impact': 'impact.ttf',
-        'Trebuchet MS': 'trebuc.ttf',
-    }
-    
-    # Пути к шрифтам в разных операционных системах
-    font_paths = []
-    
-    # Windows
-    if os.name == 'nt':
-        font_paths.append('C:/Windows/Fonts/')
-    # Linux
-    elif os.name == 'posix':
-        font_paths.extend([
-            '/usr/share/fonts/',
-            '/usr/local/share/fonts/',
-            os.path.expanduser('~/.fonts/'),
-        ])
-    # Mac
-    elif os.name == 'darwin':
-        font_paths.extend([
-            '/Library/Fonts/',
-            '/System/Library/Fonts/',
-            os.path.expanduser('~/Library/Fonts/'),
-        ])
-    
-    # Проверяем существование шрифтов
-    available_fonts = {'Стандартный (Arial)': None}
-    
-    for font_name, font_file in font_options.items():
-        if font_file is None:
-            continue
-            
-        for font_path in font_paths:
-            full_path = os.path.join(font_path, font_file)
-            if os.path.exists(full_path):
-                available_fonts[font_name] = full_path
-                break
-    
-    return available_fonts
 
 # Функции для обработки данных
 def parse_input(text: str) -> dict[str, float]:
@@ -204,9 +151,6 @@ def generate_wordcloud_image(frequencies: dict[str, float],
     if not frequencies:
         return None
     
-    # Настройки шрифта
-    font_path = settings.get('font_path')
-    
     # Создаем облако слов
     wordcloud = WordCloud(
         width=settings['width'],
@@ -216,39 +160,19 @@ def generate_wordcloud_image(frequencies: dict[str, float],
         max_words=settings['max_words'],
         min_font_size=settings['min_font_size'],
         max_font_size=settings['max_font_size'],
-        font_path=font_path,  # Добавляем выбранный шрифт
         random_state=42,
         collocations=False,
-        prefer_horizontal=settings['prefer_horizontal'],
-        margin=settings['margin']
+        prefer_horizontal=0.8,
+        margin=2
     )
     
     # Генерируем облако
     wordcloud.generate_from_frequencies(frequencies)
     
-    # Конвертируем в PIL Image
+    # Конвертируем в PIL Image и затем в BytesIO
     img = wordcloud.to_image()
-    
-    # Если указано высокое DPI, создаем изображение большего размера
-    if settings['dpi'] > 72:
-        # Масштабируем изображение для высокого DPI
-        scale_factor = settings['dpi'] / 72.0
-        new_width = int(settings['width'] * scale_factor)
-        new_height = int(settings['height'] * scale_factor)
-        
-        # Ресайзим с сохранением качества
-        img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-    
-    # Сохраняем с указанным DPI
     buf = io.BytesIO()
-    
-    if settings['dpi'] > 72:
-        # Для высокого DPI сохраняем как PNG с метаданными
-        img.save(buf, format="PNG", optimize=True, dpi=(settings['dpi'], settings['dpi']))
-    else:
-        # Для стандартного DPI сохраняем как обычно
-        img.save(buf, format="PNG", optimize=True, quality=95)
-    
+    img.save(buf, format="PNG", optimize=True, quality=95)
     buf.seek(0)
     
     return buf
@@ -266,7 +190,6 @@ def display_statistics(frequencies: dict[str, float],
             st.write(f"После фильтров: **{len(frequencies)}**")
             st.write(f"Мин. частота: **{settings['min_frequency']}**")
             st.write(f"Масштаб: **×{settings['scale']}**")
-            st.write(f"DPI: **{settings['dpi']}**")
     
     with col2:
         with st.container(border=True):
@@ -278,9 +201,6 @@ def display_statistics(frequencies: dict[str, float],
                 st.write(f"Минимальная: **{min_val:.4f}**")
                 st.write(f"Максимальная: **{max_val:.4f}**")
                 st.write(f"Средняя: **{avg_val:.4f}**")
-                if 'font_path' in settings:
-                    font_name = settings.get('selected_font', 'Стандартный')
-                    st.write(f"Шрифт: **{font_name}**")
     
     # Топ-20 слов
     st.markdown("**🏆 Топ-20 слов по частоте:**")
@@ -308,62 +228,11 @@ def display_statistics(frequencies: dict[str, float],
 # Основной интерфейс
 st.markdown('<h1 class="main-header">☁️ Генератор облака слов</h1>', unsafe_allow_html=True)
 
-# Получаем доступные шрифты
-available_fonts = get_available_fonts()
-
 # Боковая панель с настройками
 with st.sidebar:
     st.header("⚙️ Настройки")
     
-    # Настройки шрифта
-    st.subheader("🎨 Шрифт")
-    selected_font = st.selectbox(
-        "Выберите шрифт",
-        list(available_fonts.keys()),
-        help="Выберите шрифт для облака слов. Если шрифт недоступен, будет использоваться стандартный."
-    )
-    
-    # Настройки DPI/разрешения
-    st.subheader("📐 Разрешение")
-    dpi = st.slider(
-        "Качество (DPI)",
-        min_value=72,
-        max_value=600,
-        value=150,
-        step=50,
-        help="Чем выше DPI, тем лучше качество изображения, но больше размер файла. 72-150 для веба, 300+ для печати."
-    )
-    
-    # Информация о выбранном DPI
-    if dpi >= 300:
-        st.info("🎨 Высокое качество (подходит для печати)")
-    elif dpi >= 150:
-        st.info("🖥️ Среднее качество (подходит для презентаций)")
-    else:
-        st.info("🌐 Веб-качество (подходит для сайтов)")
-    
-    # Ориентация слов
-    prefer_horizontal = st.slider(
-        "Горизонтальная ориентация",
-        min_value=0.0,
-        max_value=1.0,
-        value=0.8,
-        step=0.1,
-        help="Вероятность горизонтальной ориентации слов. 0 = все вертикально, 1 = все горизонтально"
-    )
-    
-    # Отступы между словами
-    margin = st.slider(
-        "Отступы между словами",
-        min_value=1,
-        max_value=20,
-        value=2,
-        step=1,
-        help="Расстояние между словами в пикселях"
-    )
-    
     # Цветовые схемы
-    st.subheader("🎨 Цвета")
     color_schemes = {
         'Стандартная': 'viridis',
         'Пастельная': 'Pastel1',
@@ -382,7 +251,6 @@ with st.sidebar:
     )
     
     # Настройки размеров
-    st.subheader("📏 Размеры")
     col1, col2 = st.columns(2)
     with col1:
         min_font_size = st.slider("Мин. шрифт", 5, 50, 10)
@@ -390,15 +258,13 @@ with st.sidebar:
         max_font_size = st.slider("Макс. шрифт", 50, 400, 200)
     
     # Другие настройки
-    st.subheader("📊 Частоты")
     max_words = st.slider("Макс. слов", 10, 200, 50, 5)
     scale = st.slider("Масштаб частот", 0.1, 10.0, 1.0, 0.1)
     min_frequency = st.number_input("Мин. частота", 0.0, 1000.0, 0.0, 0.1)
     
     # Размеры облака
-    st.subheader("🖼️ Размер изображения")
-    width = st.slider("Ширина (пиксели)", 400, 1600, 1000, 50)
-    height = st.slider("Высота (пиксели)", 300, 1200, 600, 50)
+    width = st.slider("Ширина", 400, 1600, 1000, 50)
+    height = st.slider("Высота", 300, 1200, 600, 50)
     
     # Цвет фона
     background_color = st.color_picker("Цвет фона", "#FFFFFF")
@@ -479,9 +345,6 @@ if generate_btn:
             st.error(f"❌ Нет слов с частотой выше {min_frequency}!")
             st.stop()
         
-        # Получаем путь к шрифту
-        font_path = available_fonts.get(selected_font)
-        
         # Настройки для генерации
         settings = {
             'width': width,
@@ -492,12 +355,7 @@ if generate_btn:
             'min_font_size': min_font_size,
             'max_font_size': max_font_size,
             'scale': scale,
-            'min_frequency': min_frequency,
-            'dpi': dpi,
-            'font_path': font_path,
-            'selected_font': selected_font,
-            'prefer_horizontal': prefer_horizontal,
-            'margin': margin
+            'min_frequency': min_frequency
         }
         
         # Генерируем изображение
@@ -509,41 +367,19 @@ if generate_btn:
         st.markdown("### ☁️ Результат")
         
         if img_buffer:
-            # Отображаем изображение (с ограничением размера для предпросмотра)
+            # Отображаем изображение
             col1, col2, col3 = st.columns([1, 2, 1])
             with col2:
-                # Для высокого DPI показываем уменьшенную версию
-                if dpi > 150:
-                    st.info(f"⚠️ Предпросмотр показан в уменьшенном виде. Скачайте файл для полного качества ({dpi} DPI).")
-                
-                # Создаем копию буфера для предпросмотра
-                preview_buffer = io.BytesIO(img_buffer.getvalue())
-                st.image(preview_buffer, use_container_width=True)
+                st.image(img_buffer, use_container_width=True)
             
-            # Кнопка скачивания с информацией о размере
-            file_size = len(img_buffer.getvalue()) / 1024  # Размер в КБ
-            
-            col_dl1, col_dl2 = st.columns([3, 1])
-            with col_dl1:
-                st.download_button(
-                    label=f"⬇️ Скачать изображение (PNG, {dpi} DPI, {file_size:.1f} КБ)",
-                    data=img_buffer,
-                    file_name=f"wordcloud_{dpi}dpi.png",
-                    mime="image/png",
-                    use_container_width=True
-                )
-            
-            with col_dl2:
-                # Кнопка для скачивания в веб-качестве
-                if dpi > 72:
-                    st.download_button(
-                        label="⬇️ Веб-версия",
-                        data=preview_buffer,
-                        file_name="wordcloud_web.png",
-                        mime="image/png",
-                        use_container_width=True,
-                        help="Версия с DPI 72 для веб-использования"
-                    )
+            # Кнопка скачивания
+            st.download_button(
+                label="⬇️ Скачать изображение (PNG)",
+                data=img_buffer,
+                file_name="wordcloud.png",
+                mime="image/png",
+                use_container_width=True
+            )
             
             # Статистика
             st.markdown("---")
@@ -565,13 +401,10 @@ elif 'last_image' in st.session_state:
         st.image(st.session_state['last_image'], use_container_width=True)
     
     # Кнопка скачивания
-    file_size = len(st.session_state['last_image']) / 1024
-    dpi = st.session_state.get('last_settings', {}).get('dpi', 150)
-    
     st.download_button(
-        label=f"⬇️ Скачать изображение (PNG, {dpi} DPI, {file_size:.1f} КБ)",
+        label="⬇️ Скачать изображение (PNG)",
         data=st.session_state['last_image'],
-        file_name=f"wordcloud_{dpi}dpi.png",
+        file_name="wordcloud.png",
         mime="image/png",
         use_container_width=True
     )
@@ -591,8 +424,9 @@ st.markdown(
     """
     <div style="text-align: center; color: #6B7280; padding: 1rem;">
         @devloped by daM • WordCloud Generator • 
-        <br>Поддержка различных шрифтов • Настройка DPI до 600
     </div>
     """,
     unsafe_allow_html=True
+
 )
+
