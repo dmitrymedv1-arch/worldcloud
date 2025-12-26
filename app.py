@@ -5,14 +5,14 @@ import re
 import pandas as pd
 from collections import Counter
 
-# Настройка страницы
+# Page configuration
 st.set_page_config(
-    page_title="Генератор облака слов",
+    page_title="Word Cloud Generator",
     page_icon="☁️",
     layout="wide"
 )
 
-# CSS стили
+# CSS styles
 st.markdown("""
     <style>
     .main-header {
@@ -53,9 +53,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Функции для обработки данных
+# Data processing functions
 def parse_input(text: str) -> dict[str, float]:
-    """Парсинг ввода с улучшенной обработкой многословных терминов"""
+    """Parse input with improved multi-word term handling"""
     frequencies = {}
     lines = text.strip().split('\n')
     
@@ -64,12 +64,12 @@ def parse_input(text: str) -> dict[str, float]:
         if not line:
             continue
         
-        # Улучшенный парсинг с помощью regex
-        # Ищем последнее число (возможно с % или /) в строке
+        # Improved parsing using regex
+        # Find the last number (possibly with % or /) in the string
         match = re.search(r'(.+?)\s+([-+]?\d*\.?\d+\s*%?)$', line.strip())
         
         if not match:
-            # Пробуем старые форматы для совместимости
+            # Try old formats for compatibility
             if '\t' in line:
                 parts = line.split('\t', 1)
             elif ':' in line:
@@ -87,14 +87,14 @@ def parse_input(text: str) -> dict[str, float]:
             freq_str = match.group(2).strip()
         
         try:
-            # Обработка процентов
+            # Handle percentages
             if '%' in freq_str:
                 freq_str = freq_str.replace('%', '').strip()
                 freq = float(freq_str)
-                # Если процент > 1 (например 50%), делим на 100
+                # If percentage > 1 (e.g., 50%), divide by 100
                 if freq > 1:
                     freq = freq / 100.0
-            # Обработка дробей
+            # Handle fractions
             elif '/' in freq_str:
                 num, denom = map(float, freq_str.split('/'))
                 freq = num / denom
@@ -105,19 +105,19 @@ def parse_input(text: str) -> dict[str, float]:
                 frequencies[word] = freq
                 
         except ValueError:
-            # Пропускаем строки с ошибками
+            # Skip lines with errors
             continue
     
     return frequencies
 
 def normalize_frequencies(frequencies: dict[str, float]) -> dict[str, float]:
-    """Нормализация частот к диапазону 0-1"""
+    """Normalize frequencies to 0-1 range"""
     if not frequencies:
         return frequencies
     
     max_freq = max(frequencies.values())
     
-    # Нормализуем только если есть большие числа
+    # Normalize only if there are large numbers
     if max_freq > 1.0:
         return {word: freq / max_freq for word, freq in frequencies.items()}
     
@@ -127,17 +127,17 @@ def apply_filters(frequencies: dict[str, float],
                   min_freq: float, 
                   scale: float, 
                   max_words: int) -> dict[str, float]:
-    """Применение фильтров и масштабирования"""
-    # Применяем минимальную частоту
+    """Apply filters and scaling"""
+    # Apply minimum frequency
     filtered = {k: v for k, v in frequencies.items() if v >= min_freq}
     
     if not filtered:
         return {}
     
-    # Масштабируем
+    # Scale frequencies
     scaled = {k: v * scale for k, v in filtered.items()}
     
-    # Ограничиваем количество слов
+    # Limit number of words
     if len(scaled) > max_words:
         sorted_items = sorted(scaled.items(), key=lambda x: x[1], reverse=True)
         scaled = dict(sorted_items[:max_words])
@@ -147,11 +147,11 @@ def apply_filters(frequencies: dict[str, float],
 @st.cache_data(show_spinner=False)
 def generate_wordcloud_image(frequencies: dict[str, float], 
                             settings: dict) -> io.BytesIO:
-    """Генерация изображения облака слов с кэшированием"""
+    """Generate word cloud image with caching"""
     if not frequencies:
         return None
     
-    # Создаем облако слов
+    # Create word cloud
     wordcloud = WordCloud(
         width=settings['width'],
         height=settings['height'],
@@ -166,10 +166,10 @@ def generate_wordcloud_image(frequencies: dict[str, float],
         margin=2
     )
     
-    # Генерируем облако
+    # Generate word cloud
     wordcloud.generate_from_frequencies(frequencies)
     
-    # Конвертируем в PIL Image и затем в BytesIO
+    # Convert to PIL Image and then to BytesIO
     img = wordcloud.to_image()
     buf = io.BytesIO()
     img.save(buf, format="PNG", optimize=True, quality=95)
@@ -180,110 +180,110 @@ def generate_wordcloud_image(frequencies: dict[str, float],
 def display_statistics(frequencies: dict[str, float], 
                       total_words: int,
                       settings: dict):
-    """Отображение статистики"""
+    """Display statistics"""
     col1, col2 = st.columns(2)
     
     with col1:
         with st.container(border=True):
-            st.markdown("**📈 Основная статистика**")
-            st.write(f"Всего слов: **{total_words}**")
-            st.write(f"После фильтров: **{len(frequencies)}**")
-            st.write(f"Мин. частота: **{settings['min_frequency']}**")
-            st.write(f"Масштаб: **×{settings['scale']}**")
+            st.markdown("**📈 Basic Statistics**")
+            st.write(f"Total words: **{total_words}**")
+            st.write(f"After filters: **{len(frequencies)}**")
+            st.write(f"Min. frequency: **{settings['min_frequency']}**")
+            st.write(f"Scale: **×{settings['scale']}**")
     
     with col2:
         with st.container(border=True):
-            st.markdown("**🎯 Диапазон частот**")
+            st.markdown("**🎯 Frequency Range**")
             if frequencies:
                 min_val = min(frequencies.values())
                 max_val = max(frequencies.values())
                 avg_val = sum(frequencies.values()) / len(frequencies)
-                st.write(f"Минимальная: **{min_val:.4f}**")
-                st.write(f"Максимальная: **{max_val:.4f}**")
-                st.write(f"Средняя: **{avg_val:.4f}**")
+                st.write(f"Minimum: **{min_val:.4f}**")
+                st.write(f"Maximum: **{max_val:.4f}**")
+                st.write(f"Average: **{avg_val:.4f}**")
     
-    # Топ-20 слов
-    st.markdown("**🏆 Топ-20 слов по частоте:**")
+    # Top 20 words
+    st.markdown("**🏆 Top 20 Words by Frequency:**")
     sorted_words = sorted(frequencies.items(), key=lambda x: x[1], reverse=True)[:20]
     
-    # Создаем DataFrame для красивого отображения
-    df = pd.DataFrame(sorted_words, columns=['Слово', 'Частота'])
-    df.index = df.index + 1  # Начинаем с 1 вместо 0
+    # Create DataFrame for nice display
+    df = pd.DataFrame(sorted_words, columns=['Word', 'Frequency'])
+    df.index = df.index + 1  # Start from 1 instead of 0
     
-    # Отображаем в 2 колонки
+    # Display in 2 columns
     col1, col2 = st.columns(2)
     half = len(df) // 2 + len(df) % 2
     
     with col1:
-        st.dataframe(df.iloc[:half][['Слово', 'Частота']], 
+        st.dataframe(df.iloc[:half][['Word', 'Frequency']], 
                     use_container_width=True,
                     hide_index=False)
     
     with col2:
         if len(df) > half:
-            st.dataframe(df.iloc[half:][['Слово', 'Частота']], 
+            st.dataframe(df.iloc[half:][['Word', 'Frequency']], 
                         use_container_width=True,
                         hide_index=False)
 
-# Основной интерфейс
-st.markdown('<h1 class="main-header">☁️ Генератор облака слов</h1>', unsafe_allow_html=True)
+# Main interface
+st.markdown('<h1 class="main-header">☁️ Word Cloud Generator</h1>', unsafe_allow_html=True)
 
-# Боковая панель с настройками
+# Sidebar with settings
 with st.sidebar:
-    st.header("⚙️ Настройки")
+    st.header("⚙️ Settings")
     
-    # Цветовые схемы
+    # Color schemes
     color_schemes = {
-        'Стандартная': 'viridis',
-        'Пастельная': 'Pastel1',
-        'Темная': 'plasma',
-        'Яркая': 'Set2',
-        'Односторонняя': 'coolwarm',
-        'Теплая': 'hot',
-        'Осенняя': 'autumn',
-        'Радуга': 'rainbow'
+        'Standard': 'viridis',
+        'Pastel': 'Pastel1',
+        'Dark': 'plasma',
+        'Bright': 'Set2',
+        'Single Hue': 'coolwarm',
+        'Warm': 'hot',
+        'Autumn': 'autumn',
+        'Rainbow': 'rainbow'
     }
     
     selected_color = st.selectbox(
-        "Цветовая схема",
+        "Color Scheme",
         list(color_schemes.keys()),
         index=2
     )
     
-    # Настройки размеров
+    # Size settings
     col1, col2 = st.columns(2)
     with col1:
-        min_font_size = st.slider("Мин. шрифт", 5, 50, 10)
+        min_font_size = st.slider("Min. font size", 5, 50, 10)
     with col2:
-        max_font_size = st.slider("Макс. шрифт", 50, 400, 200)
+        max_font_size = st.slider("Max. font size", 50, 400, 200)
     
-    # Другие настройки
-    max_words = st.slider("Макс. слов", 10, 200, 50, 5)
-    scale = st.slider("Масштаб частот", 0.1, 10.0, 1.0, 0.1)
-    min_frequency = st.number_input("Мин. частота", 0.0, 1000.0, 0.0, 0.1)
+    # Other settings
+    max_words = st.slider("Max. words", 10, 200, 50, 5)
+    scale = st.slider("Frequency scale", 0.1, 10.0, 1.0, 0.1)
+    min_frequency = st.number_input("Min. frequency", 0.0, 1000.0, 0.0, 0.1)
     
-    # Размеры облака
-    width = st.slider("Ширина", 400, 1600, 1000, 50)
-    height = st.slider("Высота", 300, 1200, 600, 50)
+    # Cloud dimensions
+    width = st.slider("Width", 400, 1600, 1000, 50)
+    height = st.slider("Height", 300, 1200, 600, 50)
     
-    # Цвет фона
-    background_color = st.color_picker("Цвет фона", "#FFFFFF")
+    # Background color
+    background_color = st.color_picker("Background color", "#FFFFFF")
 
-# Основная область
+# Main area
 with st.container():
-    st.markdown("### 📝 Ввод данных")
+    st.markdown("### 📝 Data Input")
     
-    # Информационное окно
-    with st.expander("📋 Форматы ввода (нажмите для просмотра)"):
+    # Information box
+    with st.expander("📋 Input Formats (click to view)"):
         st.markdown("""
-        **Поддерживаемые форматы:**
-        - `Materials science 801` (целые числа)
-        - `Chemistry 0.698` (десятичные дроби)
-        - `Physics 50.40%` (проценты)
-        - `Engineering 395` (табуляция или пробел)
-        - `Composite material:473` (через двоеточие)
+        **Supported formats:**
+        - `Materials science 801` (whole numbers)
+        - `Chemistry 0.698` (decimal numbers)
+        - `Physics 50.40%` (percentages)
+        - `Engineering 395` (tab or space separated)
+        - `Composite material:473` (colon separated)
         
-        **Пример:**
+        **Example:**
         ```
         Materials science 801
         Chemistry 698
@@ -293,7 +293,7 @@ with st.container():
         ```
         """)
     
-    # Поле ввода с примером
+    # Input field with example
     default_data = """Materials science\t801
 Chemistry\t698
 Engineering\t395
@@ -305,36 +305,36 @@ Nanotechnology\t285
 Biomaterials\t267"""
 
     input_data = st.text_area(
-        "Введите слова и частоты (каждое слово с новой строки):",
+        "Enter words and frequencies (one per line):",
         value=default_data,
         height=200,
         label_visibility="collapsed"
     )
     
-    # Предпросмотр количества слов в реальном времени
+    # Real-time word count preview
     parsed_data = parse_input(input_data)
     if parsed_data:
-        st.caption(f"✅ Распознано слов: {len(parsed_data)}")
+        st.caption(f"✅ Words recognized: {len(parsed_data)}")
     else:
-        st.caption("ℹ️ Введите данные в указанном формате")
+        st.caption("ℹ️ Enter data in the specified format")
 
-# Кнопки управления
+# Control buttons
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
-    generate_btn = st.button("🎯 Создать облако слов", use_container_width=True)
+    generate_btn = st.button("🎯 Generate Word Cloud", use_container_width=True)
 
-# Обработка генерации
+# Processing generation
 if generate_btn:
     if not input_data.strip():
-        st.error("❌ Введите данные для генерации облака слов!")
+        st.error("❌ Please enter data to generate word cloud!")
         st.stop()
     
-    with st.spinner("🔄 Обработка данных..."):
-        # Парсим и обрабатываем данные
+    with st.spinner("🔄 Processing data..."):
+        # Parse and process data
         frequencies = parse_input(input_data)
         
         if not frequencies:
-            st.error("❌ Не удалось распознать данные. Проверьте формат ввода.")
+            st.error("❌ Could not recognize data. Please check input format.")
             st.stop()
         
         total_words = len(frequencies)
@@ -342,10 +342,10 @@ if generate_btn:
         frequencies = apply_filters(frequencies, min_frequency, scale, max_words)
         
         if not frequencies:
-            st.error(f"❌ Нет слов с частотой выше {min_frequency}!")
+            st.error(f"❌ No words with frequency above {min_frequency}!")
             st.stop()
         
-        # Настройки для генерации
+        # Settings for generation
         settings = {
             'width': width,
             'height': height,
@@ -358,67 +358,67 @@ if generate_btn:
             'min_frequency': min_frequency
         }
         
-        # Генерируем изображение
-        with st.spinner("🎨 Генерация облака слов..."):
+        # Generate image
+        with st.spinner("🎨 Generating word cloud..."):
             img_buffer = generate_wordcloud_image(frequencies, settings)
         
-        # Отображаем результат
+        # Display result
         st.markdown("---")
-        st.markdown("### ☁️ Результат")
+        st.markdown("### ☁️ Result")
         
         if img_buffer:
-            # Отображаем изображение
+            # Display image
             col1, col2, col3 = st.columns([1, 2, 1])
             with col2:
                 st.image(img_buffer, use_container_width=True)
             
-            # Кнопка скачивания
+            # Download button
             st.download_button(
-                label="⬇️ Скачать изображение (PNG)",
+                label="⬇️ Download Image (PNG)",
                 data=img_buffer,
                 file_name="wordcloud.png",
                 mime="image/png",
                 use_container_width=True
             )
             
-            # Статистика
+            # Statistics
             st.markdown("---")
-            st.markdown("### 📊 Статистика")
+            st.markdown("### 📊 Statistics")
             display_statistics(frequencies, total_words, settings)
             
-            # Сохраняем в сессию для возможного повторного использования
+            # Save to session state for potential reuse
             st.session_state['last_image'] = img_buffer.getvalue()
             st.session_state['last_frequencies'] = frequencies
             st.session_state['last_settings'] = settings
             st.session_state['total_words'] = total_words
 
-# Показываем последний результат если есть
+# Show last result if exists
 elif 'last_image' in st.session_state:
-    st.markdown("### ☁️ Последнее сгенерированное облако")
+    st.markdown("### ☁️ Last Generated Word Cloud")
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.image(st.session_state['last_image'], use_container_width=True)
     
-    # Кнопка скачивания
+    # Download button
     st.download_button(
-        label="⬇️ Скачать изображение (PNG)",
+        label="⬇️ Download Image (PNG)",
         data=st.session_state['last_image'],
         file_name="wordcloud.png",
         mime="image/png",
         use_container_width=True
     )
     
-    # Статистика
+    # Statistics
     st.markdown("---")
-    st.markdown("### 📊 Статистика")
+    st.markdown("### 📊 Statistics")
     display_statistics(
         st.session_state['last_frequencies'],
         st.session_state['total_words'],
         st.session_state['last_settings']
     )
 
-# Футер
+# Footer
 st.markdown("---")
 st.markdown(
     """
@@ -427,6 +427,4 @@ st.markdown(
     </div>
     """,
     unsafe_allow_html=True
-
 )
-
