@@ -423,9 +423,10 @@ st.markdown("---")
 st.markdown(
     """
     <div style="text-align: center; color: #6B7280; padding: 1rem;">
-        **•developed by @daM, @CTA, https://chimicatechnoacta.ru** 
+        **•developed by @daM, @CTA, https://chimicatechnoacta.ru. ** 
     </div>
     """,
     unsafe_allow_html=True
 )
+
 
